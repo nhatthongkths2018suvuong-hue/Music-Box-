@@ -14,6 +14,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -81,6 +82,8 @@ class MainActivity : AppCompatActivity() {
     private var hueAnim: ValueAnimator? = null
     private var lastHue = -10f
     private var blackout = false
+    private var blackoutAt = 0L
+    private lateinit var overlay: View
     private var swallowKey = -1
     private var focusBeforeBlackout: View? = null
 
@@ -101,6 +104,12 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        // Lớp phủ đen toàn màn hình (nằm trên cùng), mặc định ẩn
+        overlay = View(this).apply {
+            setBackgroundColor(Color.BLACK)
+            visibility = View.GONE
+        }
+        addContentView(overlay, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         prefs = getSharedPreferences("boxplayer", MODE_PRIVATE)
         wave = findViewById(R.id.wave)
         titleV = findViewById(R.id.title)
@@ -200,9 +209,15 @@ class MainActivity : AppCompatActivity() {
         blackout = on
         if (on) {
             focusBeforeBlackout = currentFocus
+            blackoutAt = SystemClock.uptimeMillis()
+            overlay.visibility = View.VISIBLE
+            overlay.bringToFront()
+            overlay.requestLayout()
+            overlay.invalidate()
             findViewById<View>(R.id.root).visibility = View.INVISIBLE
             hueAnim?.pause()
         } else {
+            overlay.visibility = View.GONE
             findViewById<View>(R.id.root).visibility = View.VISIBLE
             hueAnim?.resume()
             ui.post { (focusBeforeBlackout ?: btnPlay).requestFocus() }
@@ -212,7 +227,7 @@ class MainActivity : AppCompatActivity() {
     // Đang tắt màn hình: phím bất kỳ chỉ để bật lại, không thực hiện chức năng của phím đó
     override fun dispatchKeyEvent(e: KeyEvent): Boolean {
         if (blackout) {
-            if (e.action == KeyEvent.ACTION_DOWN) {
+            if (e.action == KeyEvent.ACTION_DOWN && SystemClock.uptimeMillis() - blackoutAt > 800) {
                 swallowKey = e.keyCode
                 setBlackout(false)
             }
@@ -227,7 +242,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (blackout) {
-            if (ev.action == MotionEvent.ACTION_DOWN) setBlackout(false)
+            if (ev.action == MotionEvent.ACTION_DOWN && SystemClock.uptimeMillis() - blackoutAt > 800) setBlackout(false)
             return true
         }
         return super.dispatchTouchEvent(ev)
